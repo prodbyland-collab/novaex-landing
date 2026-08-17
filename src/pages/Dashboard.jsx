@@ -1,53 +1,62 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../lib/auth';
-import { useLivePrices } from '../lib/useLivePrices';
+import { usePortfolio } from '../lib/portfolio';
 import { MARKETS, MARKET_MAP, formatUsd, formatNum } from '../lib/markets';
-import { fetchHoldings, ensureUsdBalance } from '../lib/api';
+import Sparkline from '../components/Sparkline';
 
 export default function Dashboard() {
-  const { user } = useAuth();
-  const prices = useLivePrices();
-  const [holdings, setHoldings] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { holdings, total, usdBalance, loading, flashDir, changeUsd, changePct, prices, reload } = usePortfolio();
+  const [animTotal, setAnimTotal] = useState(total);
 
-  const load = useCallback(async () => {
-    if (!user) return;
-    await ensureUsdBalance(user.id);
-    const data = await fetchHoldings(user.id);
-    setHoldings(data);
-    setLoading(false);
-  }, [user]);
+  // Smooth number animation
+  useEffect(() => {
+    if (Math.abs(animTotal - total) < 0.01) return;
+    const diff = total - animTotal;
+    const step = diff / 10;
+    let frame = 0;
+    const id = setInterval(() => {
+      frame++;
+      if (frame >= 10) {
+        setAnimTotal(total);
+        clearInterval(id);
+      } else {
+        setAnimTotal(prev => prev + step);
+      }
+    }, 30);
+    return () => clearInterval(id);
+  }, [total]); // eslint-disable-line
 
-  useEffect(() => { load(); }, [load]);
-
-  // Calculate portfolio value
   const portfolio = holdings.map(h => {
     const market = MARKET_MAP[h.symbol];
     const price = h.symbol === 'USD' ? 1 : (prices[h.symbol]?.price ?? market?.price ?? 0);
     return { ...h, price, value: h.amount * price };
   });
-  const totalValue = portfolio.reduce((s, h) => s + h.value, 0);
-  const usdBalance = portfolio.find(h => h.symbol === 'USD')?.value ?? 0;
-  const cryptoValue = totalValue - usdBalance;
+  const cryptoValue = total - usdBalance;
 
-  // Allocation
   const nonZero = portfolio.filter(h => h.value > 0.01);
-  const allocColors = { USD: '#52d6a1', BTC: '#ed941e', ETH: '#6179db', SOL: '#58ecbc', XRP: '#3b82f6', ADA: '#0a6cf5', AVAX: '#e84142', DOT: '#e6007a', LINK: '#2a5ada' };
+  const allocColors = { USD: '#34d399', BTC: '#ed941e', ETH: '#6179db', SOL: '#58ecbc', XRP: '#3b82f6', ADA: '#0a6cf5', AVAX: '#e84142', DOT: '#e6007a', LINK: '#2a5ada' };
+
+  const isGain = changeUsd >= 0;
 
   return (
     <div className="fade-up">
       <h1 className="page-title">Portfolio</h1>
-      <p className="page-sub">Your balances and market value at a glance.</p>
+      <p className="page-sub">Your balances and market value, updating live.</p>
 
       <div className="dash-grid">
         <div className="dash-main">
-          {/* Portfolio value card */}
+          {/* Portfolio value card with live animation */}
           <div className="portfolio-card">
             <p className="eyebrow">Total portfolio value</p>
-            <div className="portfolio-value">{formatUsd(totalValue)}</div>
-            <div className="portfolio-change gain">
-              + {formatUsd(cryptoValue)} in crypto assets
+            <div className={`portfolio-value ${flashDir === 'up' ? 'flash-up' : flashDir === 'down' ? 'flash-down' : ''}`} style={{ borderRadius: 8, padding: '2px 6px', display: 'inline-block' }}>
+              {formatUsd(animTotal)}
+            </div>
+            <div className={`portfolio-change ${isGain ? 'gain' : 'loss'}`} style={{ fontSize: 15, marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>{isGain ? '▲' : '▼'} {isGain ? '+' : ''}{formatUsd(Math.abs(changeUsd))} ({isGain ? '+' : ''}{changePct.toFixed(2)}%)</span>
+              <span className="muted-2" style={{ fontSize: 12 }}>since you started</span>
+            </div>
+            <div className="muted-2" style={{ fontSize: 12, marginTop: 4 }}>
+              {formatUsd(usdBalance)} cash · {formatUsd(cryptoValue)} in crypto
             </div>
 
             {/* Allocation bar */}
@@ -58,8 +67,8 @@ export default function Dashboard() {
                     <div
                       key={h.symbol}
                       style={{
-                        width: `${(h.value / totalValue) * 100}%`,
-                        background: allocColors[h.symbol] || '#c15df5',
+                        width: `${(h.value / total) * 100}%`,
+                        background: allocColors[h.symbol] || '#14b8a6',
                       }}
                     />
                   ))}
@@ -67,8 +76,8 @@ export default function Dashboard() {
                 <div className="alloc-legend">
                   {nonZero.map(h => (
                     <div key={h.symbol}>
-                      <i style={{ background: allocColors[h.symbol] || '#c15df5' }}></i>
-                      {h.symbol} — {((h.value / totalValue) * 100).toFixed(1)}%
+                      <i style={{ background: allocColors[h.symbol] || '#14b8a6' }}></i>
+                      {h.symbol} — {((h.value / total) * 100).toFixed(1)}%
                     </div>
                   ))}
                 </div>
@@ -76,7 +85,7 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* Holdings table */}
+          {/* Holdings table with live values */}
           <div className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <h3 style={{ fontSize: 16, fontWeight: 700 }}>Your holdings</h3>
@@ -91,23 +100,33 @@ export default function Dashboard() {
                 <Link className="btn small" to="/app/markets" style={{ marginTop: 16 }}>Go to Markets</Link>
               </div>
             ) : (
-              nonZero.map(h => (
-                <div key={h.symbol} className="holding-row">
-                  <div className="holding-left">
-                    <b className="asset-icon" style={{ background: allocColors[h.symbol] || '#c15df5', fontSize: h.symbol === 'USD' ? 11 : 16 }}>
-                      {h.symbol === 'USD' ? '$' : (MARKET_MAP[h.symbol]?.icon || h.symbol[0])}
-                    </b>
-                    <div>
-                      <strong style={{ fontSize: 14 }}>{MARKET_MAP[h.symbol]?.name || 'US Dollar'}</strong>
-                      <div className="muted-2" style={{ fontSize: 11 }}>{h.symbol}</div>
+              nonZero.map(h => {
+                const p = prices[h.symbol];
+                const up = p ? p.price >= p.prevPrice : true;
+                const sparkColor = h.symbol === 'USD' ? '#34d399' : (up ? '#34d399' : '#f87171');
+                return (
+                  <div key={h.symbol} className="holding-row">
+                    <div className="holding-left">
+                      <b className="asset-icon" style={{ background: allocColors[h.symbol] || '#14b8a6', fontSize: h.symbol === 'USD' ? 11 : 16 }}>
+                        {h.symbol === 'USD' ? '$' : (MARKET_MAP[h.symbol]?.icon || h.symbol[0])}
+                      </b>
+                      <div>
+                        <strong style={{ fontSize: 14 }}>{MARKET_MAP[h.symbol]?.name || 'US Dollar'}</strong>
+                        <div className="muted-2" style={{ fontSize: 11 }}>{h.symbol}</div>
+                      </div>
+                      {h.symbol !== 'USD' && p?.history?.length > 2 && (
+                        <Sparkline points={p.history} color={sparkColor} width={60} height={22} />
+                      )}
+                    </div>
+                    <div className="holding-amount">
+                      <strong className={h.symbol !== 'USD' && up ? 'gain' : h.symbol !== 'USD' && !up ? 'loss' : ''}>
+                        {formatNum(h.amount, h.symbol === 'USD' ? 2 : 6)} {h.symbol}
+                      </strong>
+                      <small>{formatUsd(h.value)}</small>
                     </div>
                   </div>
-                  <div className="holding-amount">
-                    <strong>{formatNum(h.amount, h.symbol === 'USD' ? 2 : 6)} {h.symbol}</strong>
-                    <small>{formatUsd(h.value)}</small>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
@@ -146,10 +165,10 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Watchlist */}
+          {/* Watchlist with sparklines */}
           <div className="card-2">
             <p className="eyebrow" style={{ marginBottom: 14 }}>Watchlist</p>
-            {MARKETS.slice(0, 4).map(m => {
+            {MARKETS.slice(0, 5).map(m => {
               const p = prices[m.symbol];
               const up = (p?.price ?? m.price) >= (p?.prevPrice ?? m.price);
               return (
@@ -157,9 +176,12 @@ export default function Dashboard() {
                   <div className="holding-left">
                     <b className="asset-icon" style={{ background: m.color, fontSize: 14 }}>{m.icon}</b>
                     <strong style={{ fontSize: 13 }}>{m.symbol}</strong>
+                    {p?.history?.length > 2 && (
+                      <Sparkline points={p.history} color={up ? '#34d399' : '#f87171'} width={50} height={20} />
+                    )}
                   </div>
                   <div className="holding-amount">
-                    <strong className={up ? 'gain' : 'loss'}>{formatUsd(p?.price ?? m.price)}</strong>
+                    <strong className={up ? 'gain' : 'loss'} style={{ transition: 'color 0.3s' }}>{formatUsd(p?.price ?? m.price)}</strong>
                     <small className={p?.change >= 0 ? 'gain' : 'loss'}>{p?.change >= 0 ? '+' : ''}{(p?.change ?? m.change).toFixed(2)}%</small>
                   </div>
                 </div>

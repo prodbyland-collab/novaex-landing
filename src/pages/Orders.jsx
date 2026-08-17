@@ -50,7 +50,7 @@ export default function Orders() {
         <span>{formatUsd(o.price)}</span>
         <span>
           {o.status === 'open' ? (
-            <span className="badge badge-purple">open</span>
+            <span className="badge badge-teal">open</span>
           ) : o.status === 'filled' ? (
             <span className="badge badge-green">filled</span>
           ) : (

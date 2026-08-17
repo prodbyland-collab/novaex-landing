@@ -1,13 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../lib/auth';
-import { useLivePrices } from '../lib/useLivePrices';
+import { usePortfolio } from '../lib/portfolio';
 import { MARKETS, formatUsd, formatNum } from '../lib/markets';
 import { executeMarketOrder, createLimitOrder, fetchHoldings, ensureUsdBalance } from '../lib/api';
+import Sparkline from '../components/Sparkline';
 
 export default function Markets() {
   const { user } = useAuth();
-  const prices = useLivePrices();
-  const [holdings, setHoldings] = useState([]);
+  const { prices, holdings, reload } = usePortfolio();
   const [selected, setSelected] = useState('BTC');
   const [side, setSide] = useState('buy');
   const [orderType, setOrderType] = useState('market');
@@ -15,15 +15,6 @@ export default function Markets() {
   const [limitPrice, setLimitPrice] = useState('');
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(false);
-
-  const load = useCallback(async () => {
-    if (!user) return;
-    await ensureUsdBalance(user.id);
-    const data = await fetchHoldings(user.id);
-    setHoldings(data);
-  }, [user]);
-
-  useEffect(() => { load(); }, [load]);
 
   const market = MARKETS.find(m => m.symbol === selected);
   const currentPrice = prices[selected]?.price ?? market?.price ?? 0;
@@ -58,7 +49,7 @@ export default function Markets() {
       }
       setAmount('');
       setLimitPrice('');
-      await load();
+      await reload();
     } catch (err) {
       showToast(err.message || 'Trade failed', 'error');
     } finally {
@@ -72,23 +63,25 @@ export default function Markets() {
       <p className="page-sub">Trade spot or set limit orders on live prices.</p>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 24 }}>
-        {/* Markets table */}
+        {/* Markets table with sparklines */}
         <div className="card">
           <div className="market-table">
             <div className="table-head">
-              <span>Asset</span><span>Last price</span><span>24h change</span><span>Market cap</span><span></span>
+              <span>Asset</span><span>Price</span><span>Trend</span><span>24h</span><span></span>
             </div>
             {MARKETS.map(m => {
               const p = prices[m.symbol];
               const up = (p?.price ?? m.price) >= (p?.prevPrice ?? m.price);
+              const isSelected = selected === m.symbol;
               return (
                 <div
                   key={m.symbol}
-                  className={`table-row ${selected === m.symbol ? 'flash-up' : ''}`}
+                  className="table-row"
                   style={{
                     cursor: 'pointer',
-                    background: selected === m.symbol ? 'rgba(193,93,245,0.06)' : 'transparent',
-                    borderRadius: selected === m.symbol ? 8 : 0,
+                    background: isSelected ? 'rgba(20,184,166,0.06)' : 'transparent',
+                    borderRadius: isSelected ? 8 : 0,
+                    transition: 'background 0.15s',
                   }}
                   onClick={() => { setSelected(m.symbol); setLimitPrice(''); }}
                 >
@@ -96,10 +89,10 @@ export default function Markets() {
                     <b className="asset-icon" style={{ background: m.color }}>{m.icon}</b>
                     <span><span className="asset-name">{m.name}</span><span className="asset-symbol">{m.symbol}</span></span>
                   </span>
-                  <span className={up ? 'flash-up' : 'flash-down'} style={{ borderRadius: 4, padding: '2px 4px' }}>{formatUsd(p?.price ?? m.price)}</span>
+                  <span className={up ? 'gain' : 'loss'} style={{ transition: 'color 0.3s', fontWeight: 600 }}>{formatUsd(p?.price ?? m.price)}</span>
+                  <span>{p?.history?.length > 2 && <Sparkline points={p.history} color={up ? '#34d399' : '#f87171'} width={70} height={24} />}</span>
                   <span className={p?.change >= 0 ? 'gain' : 'loss'}>{p?.change >= 0 ? '+' : ''}{(p?.change ?? m.change).toFixed(2)}%</span>
-                  <span className="muted">{m.cap}</span>
-                  <span className="badge badge-purple" style={{ justifySelf: 'end' }}>{selected === m.symbol ? 'Selected' : ''}</span>
+                  <span className="badge badge-teal" style={{ justifySelf: 'end' }}>{isSelected ? 'Selected' : ''}</span>
                 </div>
               );
             })}
@@ -113,7 +106,14 @@ export default function Markets() {
               <b className="asset-icon" style={{ background: market?.color }}>{market?.icon}</b>
               <h3 style={{ fontSize: 18, fontWeight: 700 }}>{selected} / USD</h3>
             </div>
-            <div style={{ font: '24px var(--mono)', fontWeight: 700 }}>{formatUsd(currentPrice)}</div>
+            <div style={{ font: '24px var(--mono)', fontWeight: 700, transition: 'color 0.3s' }} className={currentPrice >= (prices[selected]?.prevPrice ?? currentPrice) ? 'gain' : 'loss'}>
+              {formatUsd(currentPrice)}
+            </div>
+            {prices[selected]?.history?.length > 2 && (
+              <div style={{ marginTop: 8 }}>
+                <Sparkline points={prices[selected].history} color={currentPrice >= (prices[selected]?.prevPrice ?? currentPrice) ? '#34d399' : '#f87171'} width={300} height={50} />
+              </div>
+            )}
           </div>
 
           <form onSubmit={handleSubmit} className="trade-panel">

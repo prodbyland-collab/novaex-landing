@@ -1,9 +1,12 @@
 import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
+import { usePortfolio } from '../lib/portfolio';
+import { formatUsd } from '../lib/markets';
 import '../styles/app.css';
 
 export default function AppLayout() {
   const { user, signOut } = useAuth();
+  const { total, changeUsd, changePct, flashDir } = usePortfolio();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -26,6 +29,7 @@ export default function AppLayout() {
   }
 
   const initials = (user?.email || 'U').slice(0, 2).toUpperCase();
+  const isGain = changeUsd >= 0;
 
   return (
     <div>
@@ -40,6 +44,15 @@ export default function AppLayout() {
             </Link>
           ))}
         </nav>
+        <div className="header-balance" data-flash={flashDir}>
+          <div className="header-balance-label">Portfolio</div>
+          <div className={`header-balance-value ${flashDir === 'up' ? 'flash-up' : flashDir === 'down' ? 'flash-down' : ''}`}>
+            {formatUsd(total)}
+          </div>
+          <div className={`header-balance-change ${isGain ? 'gain' : 'loss'}`}>
+            {isGain ? '+' : ''}{formatUsd(changeUsd)} ({isGain ? '+' : ''}{changePct.toFixed(2)}%)
+          </div>
+        </div>
         <div className="user-area">
           <span className="user-email">{user?.email}</span>
           <div className="user-avatar">{initials}</div>

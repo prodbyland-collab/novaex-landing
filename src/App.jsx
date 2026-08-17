@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './lib/auth';
+import { PortfolioProvider } from './lib/portfolio';
 import Landing from './pages/Landing';
 import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
@@ -16,19 +17,23 @@ function Protected({ children }) {
   return children;
 }
 
+function ProtectedApp() {
+  const { user } = useAuth();
+  return (
+    <Protected>
+      <PortfolioProvider user={user}>
+        <AppLayout />
+      </PortfolioProvider>
+    </Protected>
+  );
+}
+
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/auth" element={<Auth />} />
-      <Route
-        path="/app"
-        element={
-          <Protected>
-            <AppLayout />
-          </Protected>
-        }
-      >
+      <Route path="/app" element={<ProtectedApp />}>
         <Route index element={<Dashboard />} />
         <Route path="markets" element={<Markets />} />
         <Route path="orders" element={<Orders />} />

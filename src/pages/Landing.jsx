@@ -61,19 +61,19 @@ export default function Landing() {
               <svg viewBox="0 0 360 120" role="img" aria-label="Rising price chart">
                 <defs>
                   <linearGradient id="fade" x1="0" x2="0" y1="0" y2="1">
-                    <stop stopColor="#b965ff" stopOpacity=".45" />
-                    <stop offset="1" stopColor="#b965ff" stopOpacity="0" />
+                    <stop stopColor="#2dd4bf" stopOpacity=".45" />
+                    <stop offset="1" stopColor="#2dd4bf" stopOpacity="0" />
                   </linearGradient>
                 </defs>
                 <path d="M0 105 L25 91 45 94 70 70 95 85 116 62 142 77 166 38 192 55 220 23 247 48 270 32 296 39 322 11 360 20 V120 H0Z" fill="url(#fade)" />
-                <path d="M0 105 L25 91 45 94 70 70 95 85 116 62 142 77 166 38 192 55 220 23 247 48 270 32 296 39 322 11 360 20" fill="none" stroke="#cc78ff" strokeWidth="3" />
+                <path d="M0 105 L25 91 45 94 70 70 95 85 116 62 142 77 166 38 192 55 220 23 247 48 270 32 296 39 322 11 360 20" fill="none" stroke="#2dd4bf" strokeWidth="3" />
               </svg>
               <div className="coins"><span>₿</span><span>Ξ</span><span>◈</span><span>+</span></div>
             </div>
             <div className="floating-stat">
               <span>BTC / USD</span>
               <strong>{formatUsd(prices.BTC?.price ?? 104820)}</strong>
-              <b>+2.38%</b>
+              <b className={prices.BTC?.change >= 0 ? 'gain' : 'loss'}>{prices.BTC?.change >= 0 ? '+' : ''}{(prices.BTC?.change ?? 2.38).toFixed(2)}%</b>
             </div>
             <div className="coin coin-a">₿</div>
             <div className="coin coin-b">Ξ</div>
